@@ -1,0 +1,11 @@
+# use glob syntax.
+syntax: glob
+*.o
+*.out
+obj/*
+*.mat
+*fading_files/*
+
+# switch to regexp syntax.
+#syntax: regexp
+#^\.pc/
