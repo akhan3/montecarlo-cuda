@@ -1,6 +1,6 @@
 #ifndef _MYMACROS_H_
 #define _MYMACROS_H_
-//
+
 #ifdef __CUDACC__
 #define HOST __host__
 #define DEVICE __device__
@@ -13,7 +13,8 @@
 
 #define NEWLINE printf("\n")
 #define TAB printf("    ")
-#define SEPARATOR printf("-------------------\n")
+#define SEPARATOR printf("--------------------------------------------------------------------------------\n")
+#define SEPARATOR2 printf("================================================================================\n")
 
 // floating point precision to use
 // typedef float fp_type;

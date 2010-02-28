@@ -41,7 +41,7 @@ HOSTDEVICE inline std::ostream& operator<<(std::ostream& output, const Vector3 &
 }
 
 #ifdef __CUDACC__
-#include "Vector3.cu"
+#include "Vector3.cpp"
 #endif
 
 #endif // #ifndef  _VECTOR3_H_

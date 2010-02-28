@@ -1,3 +1,6 @@
+#ifndef _VECTOR3_CU_
+#define _VECTOR3_CU_
+
 #include "Vector3.hpp"
 
 HOSTDEVICE Vector3::Vector3() {
@@ -63,3 +66,5 @@ HOSTDEVICE fp_type Vector3::magnitude() const {
 HOST void Vector3::print() const {
     printf("[%g,\t %g,\t %g]\n", elem[0], elem[1], elem[2]);
 }
+
+#endif // #ifndef  _VECTOR3_CU_

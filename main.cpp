@@ -1,16 +1,7 @@
 // TODO: implement matfile saving on the fly to save memory
 
 #include <cstdlib>
-#include <iostream>
-#include <ios>
-#include <cmath>
-#include <fstream>
-using std::cout;
-using std::endl;
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <assert.h>
+#include <cutil_inline.h>
 
 #include "my_macros.hpp"
 #include "Vector3.hpp"
@@ -38,24 +29,33 @@ Vector3 LLG_Mprime(
             const fp_type alfa, 
             const fp_type Ms);
 
-int rk4solver_cuda(
-        int fieldlength, 
-        fp_type dt, 
-        fp_type *timepoints, 
-        Vector3 *M);
 
-int rk4solver(int fieldlength, fp_type dt, fp_type *timepoints, Vector3 *M)
+int rk4solver_cuda(
+        const int fieldlength, 
+        const fp_type dt, 
+        const fp_type *timepoints, 
+        Vector3 *M,
+        double *time_kernel_cumulative);
+
+
+int rk4solver(
+        const int fieldlength, 
+        const fp_type dt, 
+        const fp_type *timepoints, 
+        Vector3 *M)
 {
     Vector3 *Hcoupling = (Vector3*)malloc(numdots * sizeof(Vector3));
     if(Hcoupling == NULL) {
         fprintf(stderr, "%s:%d Error allocating memory\n", __FILE__, __LINE__);
         return EXIT_FAILURE;
     }
+
     // Time-marching loop
     for(int i = 0; i <= fieldlength-2; i++) 
     {
         const fp_type t = timepoints[i];
-        printf("t = %g\n", t);
+        //printf("t = %g\n", t);
+        printf("%d ", i); fflush(stdout);
         const Vector3 Hext = Hext_function(t);
 
         // determine coupling field from neighbouring dots
@@ -77,6 +77,7 @@ int rk4solver(int fieldlength, fp_type dt, fp_type *timepoints, Vector3 *M)
             M[(i+1)*numdots + n] = M[i*numdots + n] + dt * Mprime;
         }
     }
+    NEWLINE;
     free(Hcoupling);
     return 0;
 }
@@ -110,32 +111,73 @@ int solve_array() {
             M[0*numdots + n] = Ms * Vector3(sin(phi)*cos(theta), sin(phi)*sin(theta), cos(phi));
         }
     }
-    printf("%.2f MB of memory is required for the simulation of %dx%d dots for %gs at %gs stepping\n",
+    printf("%.2f MB of memory is required for the simulation of %dx%d dots for %d time points (%gs at %gs stepping)\n",
                 fieldlength * numdots * sizeof(Vector3)/1024.0/1024.0,
-                numdots_y, numdots_x, ftime, timestep);
+                numdots_y, numdots_x, fieldlength, ftime, timestep);
     
-    // call the RK solver routine
-    //int status = rk4solver(fieldlength, dt, timepoints, M);
-    int status = rk4solver_cuda(fieldlength, dt, timepoints, M);
-
+    int status = 0;
+    
+// call the RK solver routine on GPU
+    NEWLINE; printf("Simulating on GPU...\n"); 
+    // create timer
+    unsigned int timer_gpu = 0;
+    double time_kernel_cumulative = 0;
+    cutilCheckError(cutCreateTimer(&timer_gpu));
+    cutilCheckError(cutStartTimer(timer_gpu));  // start timer
+    // launch solver
+    status |= rk4solver_cuda(fieldlength, dt, timepoints, M, &time_kernel_cumulative);
+    // read the timer
+    cutilCheckError(cutStopTimer(timer_gpu));
+    double time_gpu = cutGetTimerValue(timer_gpu);
+    printf("Time taken by memory trasfers and sync overhead = %f ms\n", time_gpu - time_kernel_cumulative);
+    SEPARATOR;
+    printf("Time taken by RK4 solver on GPU = %f ms\n", time_gpu);
+    SEPARATOR;
     printf("M(t = 0, dot0) = "); M[0*numdots + 0].print();
     printf("M(t = %g, dot0) = ", ftime); M[(fieldlength-1)*numdots + 0].print();
+    if(save_matfiles) {
+        char matfile_name[100];
+        sprintf(matfile_name, "%s/%s_results_cuda.mat", matfiles_dir, sim_id);
+        status |= save_matfile(matfile_name, fieldlength, numdots_y, numdots_x, M, timepoints, 1);
+    }
 
-    int status1 = 0;
+// call the RK solver routine on CPU
+    NEWLINE; printf("Simulating on CPU...\n"); 
+    // create timer
+    unsigned int timer_cpu = 0;
+    cutilCheckError(cutCreateTimer(&timer_cpu));
+    cutilCheckError(cutStartTimer(timer_cpu));  // start timer
+    // launch solver
+    status |= rk4solver(fieldlength, dt, timepoints, M);
+    // read the timer
+    cutilCheckError(cutStopTimer(timer_cpu));
+    double time_cpu = cutGetTimerValue(timer_cpu);
+    SEPARATOR;
+    printf("Time taken by RK4 solver on CPU = %f ms\n", time_cpu);
+    SEPARATOR;
+    printf("M(t = 0, dot0) = "); M[0*numdots + 0].print();
+    printf("M(t = %g, dot0) = ", ftime); M[(fieldlength-1)*numdots + 0].print();
     if(save_matfiles) {
         char matfile_name[100];
         sprintf(matfile_name, "%s/%s_results.mat", matfiles_dir, sim_id);
-        status1 = save_matfile(matfile_name, fieldlength, numdots_y, numdots_x, M, timepoints, 1);
+        status |= save_matfile(matfile_name, fieldlength, numdots_y, numdots_x, M, timepoints, 1);
     }
-    
+            
     // reclaim memory
     free(timepoints);
     free(M);
-    printf("%.2f MB of memory was required for the simulation of %dx%d dots for %gs at %gs stepping\n",
+    printf("%.2f MB of memory was required for the simulation of %dx%d dots for %d time points (%gs at %gs stepping)\n",
                 fieldlength * numdots * sizeof(Vector3)/1024.0/1024.0,
-                numdots_y, numdots_x, ftime, timestep);
+                numdots_y, numdots_x, fieldlength, ftime, timestep);
                 
-    return status || status1;
+    // print speed-up info
+    cudaDeviceProp deviceProp;
+    cudaGetDeviceProperties(&deviceProp, 0);
+    SEPARATOR2;
+    printf("Speed-up factor = %.2f (%s with %d CUDA cores)\n", 
+        time_cpu/time_gpu, deviceProp.name, 8 * deviceProp.multiProcessorCount);
+    SEPARATOR2;
+    return status;
 }
 
 int main(int argc, char **argv) {

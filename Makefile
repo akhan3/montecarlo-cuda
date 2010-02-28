@@ -1,6 +1,5 @@
 NVCC 		:= 	nvcc
-#CXX         := 	g++-4.3
-CXX         := 	$(NVCC)
+CXX         := 	g++-4.3
 CC         	:=	gcc-4.3
 LINK      	:= 	g++-4.3 -fPIC
 
@@ -22,16 +21,16 @@ endif
 INCLUDES   	+= -I. $(MATLAB_INCLUDES)
 LIBRARIES 	+= $(MATLAB_LIBRARIES)
 
-#CXXFLAGS    := -Wall -W $(INCLUDES) $(COMMONFLAGS)
-CXXFLAGS    := $(INCLUDES) $(COMMONFLAGS)
+CXXFLAGS    := -Wall -W $(INCLUDES) $(COMMONFLAGS)
 NVCCFLAGS   += --compiler-options -fno-strict-aliasing \
 				--compiler-bindir=$(HOME)/usr_local/bin/gcc-4.3
 
-#OBJS        := main.o save_matfile.o sim_constants.o Matrix3.o Vector3.o
-OBJS        := save_matfile.o sim_constants.o \
-				rk4solver_kernel.o \
-				main.o
-
+OBJS        :=	sim_constants.o \
+				save_matfile.o  \
+				main.o \
+				rk4solver_kernel.o
+				#Vector3.o Matrix3.o
+				
 TARGET    	:= main.out
 
 # ==================================================================
@@ -41,18 +40,21 @@ TARGET    	:= main.out
 $(TARGET): 	$(OBJS)
 	$(LINK) -o $@ $(OBJS) $(LIBRARIES)
 
-rk4solver_kernel.o : rk4solver_kernel.cu my_macros.hpp
+sim_constants.o : sim_constants.cpp sim_constants.hpp my_macros.hpp 
+save_matfile.o	: save_matfile.cpp my_macros.hpp
+main.o			: main.cpp my_macros.hpp 
+rk4solver_kernel.o : rk4solver_kernel.cu Vector3.cpp Vector3.hpp my_macros.hpp 
 	$(NVCC) $(NVCCFLAGS) $(INCLUDES) -o $@ -c rk4solver_kernel.cu
-main.o			: main.cu my_macros.hpp
-	$(NVCC) $(NVCCFLAGS) $(INCLUDES) -o $@ -c main.cu
-sim_constants.o : sim_constants.cu sim_constants.hpp my_macros.hpp
-	$(NVCC) $(NVCCFLAGS) $(INCLUDES) -o $@ -c sim_constants.cu
-#Vector3.o		: Vector3.cu Vector3.hpp my_macros.hpp
-	#$(NVCC) $(NVCCFLAGS) $(INCLUDES) -o $@ -c Vector3.cu
-save_matfile.o 	: save_matfile.cpp my_macros.hpp
-#Matrix3.o		: Matrix3.cpp Matrix3.hpp my_macros.hpp
+
 
 compile:	$(OBJS)
 
 clean:
-	rm -vf $(OBJS) $(TARGET)
+	rm -vf $(OBJS)
+
+tidy: clean
+	rm -vf $(TARGET)
+
+none:
+# Vector3.o		: Vector3.cu Vector3.hpp my_macros.hpp
+# Matrix3.o		: Matrix3.cpp Matrix3.hpp my_macros.hpp

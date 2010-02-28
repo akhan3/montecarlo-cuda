@@ -23,6 +23,6 @@ extern const char matfiles_dir[];
 extern const char *sim_id;
 
 // external field as a function of time
-HOSTDEVICE Vector3 Hext_function(fp_type t);
+Vector3 Hext_function(fp_type t);
 
 #endif // #ifndef _SIM_CONSTANTS_H_
