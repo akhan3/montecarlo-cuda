@@ -48,7 +48,7 @@ int save_matfile(
 
     memcpy( (void*)(mxGetPr(pmat_t)), (void*)t_ptr, fieldlength*sizeof(*t_ptr));
     for(int p = 0; p < fieldlength; p++)
-        ((Vector3*)mxGetPr(pmat_Hext))[p] = Hext(t_ptr[p]);
+        ((Vector3*)mxGetPr(pmat_Hext))[p] = Hext_function(t_ptr[p]);
     
     // open the MAT file
     MATFile *pmatfile = matOpen(file, "w7.3");

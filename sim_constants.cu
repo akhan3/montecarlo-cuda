@@ -21,7 +21,8 @@ const char *sim_id = (char*)malloc(100);
 int dummy = sprintf((char*)sim_id, "sim_%dx%d_dots_%g_coupling_%gs_step_%gs", numdots_y, numdots_x, c0, finaltime, timestep);
 
 // external field as a function of time
-Vector3 Hext(fp_type t) {
+HOSTDEVICE Vector3 Hext_function(fp_type t) 
+{
     fp_type Hmax = 0.5E6; // maximum of external field
     //return Hmax * Vector3(  0.1*exp(-2.0*t/finaltime) * sin(5.0E+10*t),
                             //0.2*exp(-2.0*t/finaltime) * sin(5.0E+10*t),

@@ -19,8 +19,6 @@ using std::endl;
 #include "save_matfile.hpp"
 
 
-int template_main();
-
 // generates a uniformly distributed random number between a and b
 fp_type rand_atob(fp_type a, fp_type b) {
     fp_type r = rand() / (fp_type)RAND_MAX;
@@ -29,36 +27,52 @@ fp_type rand_atob(fp_type a, fp_type b) {
 }
 
 // implements Landau-Lifshitz-Gilbert differential equation
-Vector3 LLG_Mprime(const fp_type t, const Vector3 &M, const Vector3 &Hcoupling) {
-    Vector3 Heff = Hext(t) - N * M + Hcoupling;
-    Vector3 McrossH = M.cross(Heff);
-    Vector3 Mprime = -c * McrossH - (alfa * c / Ms) * M.cross(McrossH);
-    return Mprime;
-}
+HOSTDEVICE 
+Vector3 LLG_Mprime(
+            const fp_type t, 
+            const Vector3 &M, 
+            const Vector3 &Hcoupling,
+            const Vector3 &Hext,
+            const Vector3 N, 
+            const fp_type c, 
+            const fp_type alfa, 
+            const fp_type Ms);
 
-int rk4solver_cuda(int fieldlength, fp_type dt, fp_type *timepoints, Vector3 *M);
+int rk4solver_cuda(
+        int fieldlength, 
+        fp_type dt, 
+        fp_type *timepoints, 
+        Vector3 *M);
 
-int rk4_solver(int fieldlength, fp_type dt, fp_type *timepoints, Vector3 *M) {
+int rk4solver(int fieldlength, fp_type dt, fp_type *timepoints, Vector3 *M)
+{
     Vector3 *Hcoupling = (Vector3*)malloc(numdots * sizeof(Vector3));
     if(Hcoupling == NULL) {
         fprintf(stderr, "%s:%d Error allocating memory\n", __FILE__, __LINE__);
         return EXIT_FAILURE;
     }
-    for(int i = 0; i <= fieldlength-2; i++) {
-        printf("t = %g\n", timepoints[i]);
+    // Time-marching loop
+    for(int i = 0; i <= fieldlength-2; i++) 
+    {
+        const fp_type t = timepoints[i];
+        printf("t = %g\n", t);
+        const Vector3 Hext = Hext_function(t);
+
         // determine coupling field from neighbouring dots
-        for(int n = 0; n < numdots; n++) {
+        for(int n = 0; n < numdots; n++) 
+        {
             Hcoupling[n] = c0 * (   ((n-numdots_x >= 0)      ? M[i*numdots + n-numdots_x] : Vector3(0,0,0))     // top
                                   + ((n+numdots_x < numdots) ? M[i*numdots + n+numdots_x] : Vector3(0,0,0))     // bottom
                                   + ((n%numdots_x != 0)      ? M[i*numdots + n-1]         : Vector3(0,0,0))     // left
                                   + (((n+1)%numdots_x != 0)  ? M[i*numdots + n+1]         : Vector3(0,0,0)) );  // right
         }
         // evaluate one-step of RK for all dots
-        for(int n = 0; n < numdots; n++) {
-            Vector3 k1 = LLG_Mprime(timepoints[i]        , M[i*numdots + n]             , Hcoupling[n]);
-            Vector3 k2 = LLG_Mprime(timepoints[i] + dt/2 , M[i*numdots + n] + (dt/2)*k1 , Hcoupling[n]);
-            Vector3 k3 = LLG_Mprime(timepoints[i] + dt/2 , M[i*numdots + n] + (dt/2)*k2 , Hcoupling[n]);
-            Vector3 k4 = LLG_Mprime(timepoints[i] + dt   , M[i*numdots + n] + dt*k3     , Hcoupling[n]);
+        for(int n = 0; n < numdots; n++) 
+        {
+            Vector3 k1 = LLG_Mprime(t        , M[i*numdots + n]             , Hcoupling[n], Hext, N, c, alfa, Ms);
+            Vector3 k2 = LLG_Mprime(t + dt/2 , M[i*numdots + n] + (dt/2)*k1 , Hcoupling[n], Hext, N, c, alfa, Ms);
+            Vector3 k3 = LLG_Mprime(t + dt/2 , M[i*numdots + n] + (dt/2)*k2 , Hcoupling[n], Hext, N, c, alfa, Ms);
+            Vector3 k4 = LLG_Mprime(t + dt   , M[i*numdots + n] + dt*k3     , Hcoupling[n], Hext, N, c, alfa, Ms);
             Vector3 Mprime = 1/6.0 * (k1 + 2*k2 + 2*k3 + k4);
             M[(i+1)*numdots + n] = M[i*numdots + n] + dt * Mprime;
         }
@@ -101,7 +115,8 @@ int solve_array() {
                 numdots_y, numdots_x, ftime, timestep);
     
     // call the RK solver routine
-    int status = rk4_solver(fieldlength, dt, timepoints, M);
+    //int status = rk4solver(fieldlength, dt, timepoints, M);
+    int status = rk4solver_cuda(fieldlength, dt, timepoints, M);
 
     printf("M(t = 0, dot0) = "); M[0*numdots + 0].print();
     printf("M(t = %g, dot0) = ", ftime); M[(fieldlength-1)*numdots + 0].print();
@@ -120,9 +135,6 @@ int solve_array() {
                 fieldlength * numdots * sizeof(Vector3)/1024.0/1024.0,
                 numdots_y, numdots_x, ftime, timestep);
                 
-    //char *ARGV[2] = {"AAMIR", "AAMIR"};
-    //template_main(1, ARGV);
-    template_main();
     return status || status1;
 }
 
