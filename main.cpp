@@ -18,7 +18,6 @@ fp_type rand_atob(fp_type a, fp_type b) {
 }
 
 // implements Landau-Lifshitz-Gilbert differential equation
-HOSTDEVICE 
 Vector3 LLG_Mprime(
             const fp_type t, 
             const Vector3 &M, 
@@ -83,7 +82,8 @@ int rk4solver(
 }
 
 
-int solve_array() {
+int solve_array() 
+{
     const fp_type ftime = timestep * ceil((fp_type)finaltime / timestep);
     const int fieldlength = ftime / timestep + 1;
     fp_type *timepoints = (fp_type*)malloc(fieldlength * sizeof(fp_type));
@@ -129,7 +129,9 @@ int solve_array() {
     // read the timer
     cutilCheckError(cutStopTimer(timer_gpu));
     double time_gpu = cutGetTimerValue(timer_gpu);
-    printf("Time taken by memory trasfers and sync overhead = %f ms\n", time_gpu - time_kernel_cumulative);
+    NEWLINE;
+    printf("Time taken by all (%d) kernel launches = %f ms (%.0f%%)\n", fieldlength-1, time_kernel_cumulative, 100*time_kernel_cumulative/time_gpu);
+    printf("Time taken by memory trasfers and sync overhead = %f ms (%.0f%%)\n", time_gpu - time_kernel_cumulative, 100*(1-time_kernel_cumulative/time_gpu));
     SEPARATOR;
     printf("Time taken by RK4 solver on GPU = %f ms\n", time_gpu);
     SEPARATOR;
@@ -163,20 +165,20 @@ int solve_array() {
         status |= save_matfile(matfile_name, fieldlength, numdots_y, numdots_x, M, timepoints, 1);
     }
             
+    // print speed-up info
+    cudaDeviceProp deviceProp;
+    cudaGetDeviceProperties(&deviceProp, 0);
+    SEPARATOR2;
+    printf("Speed-up factor = %.2f (\"%s\" with %d cores)\n", 
+        time_cpu/time_gpu, deviceProp.name, 8 * deviceProp.multiProcessorCount);
+    SEPARATOR2;
+
     // reclaim memory
     free(timepoints);
     free(M);
     printf("%.2f MB of memory was required for the simulation of %dx%d dots for %d time points (%gs at %gs stepping)\n",
                 fieldlength * numdots * sizeof(Vector3)/1024.0/1024.0,
                 numdots_y, numdots_x, fieldlength, ftime, timestep);
-                
-    // print speed-up info
-    cudaDeviceProp deviceProp;
-    cudaGetDeviceProperties(&deviceProp, 0);
-    SEPARATOR2;
-    printf("Speed-up factor = %.2f (%s with %d CUDA cores)\n", 
-        time_cpu/time_gpu, deviceProp.name, 8 * deviceProp.multiProcessorCount);
-    SEPARATOR2;
     return status;
 }
 
@@ -189,7 +191,8 @@ int main(int argc, char **argv) {
     if( !strcmp(argv[argc-1], "no-matlab") )
         matlab = 0;
 
-    srand((unsigned int)time(NULL));
+    //srand((unsigned int)time(NULL));
+    srand((unsigned int)54);
     int status = solve_array();
 
     if(status == 0)

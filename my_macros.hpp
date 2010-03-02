@@ -5,10 +5,12 @@
 #define HOST __host__
 #define DEVICE __device__
 #define HOSTDEVICE __host__ __device__
+#define ALIGN_16 __align__(16)
 #else
 #define HOST
 #define DEVICE
 #define HOSTDEVICE
+#define ALIGN_16
 #endif
 
 #define NEWLINE printf("\n")

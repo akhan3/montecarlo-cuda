@@ -96,24 +96,32 @@ int rk4solver_cuda(
     for(int i = 0; i <= fieldlength-2; i++) 
     {
         const fp_type t = timepoints[i];
-        //NEWLINE;
-        //printf("t = %g\n", t);
-        printf("%d ", i); fflush(stdout);
                 
         // copy current value of M to device global memory
         //printf("%f MB copied\n", numdots * sizeof(Vector3) / (1024.0*1024.0));
         cutilSafeCall( cudaMemcpy( Mcurr_d, &M[i*numdots], numdots * sizeof(Vector3), cudaMemcpyHostToDevice ) );
 
         // set up kernel parameters
-        dim3 grid = ceil(numdots / (fp_type)512);
-        dim3 threads(512, 1, 1);
-        assert(threads.x <= 512);    // max_threads_per_block
-        //printf("numdots_x=%u, numdots_y=%u, numdots=%u, threads.x=%u, threads.y=%u, grid.x=%u\n",
-                //numdots_x,    numdots_y,    numdots,    threads.x,    threads.y,    grid.x);
-        //printf("launching kernel with %u blocks and %u threads...\n", 
-                    //grid.x*grid.y*grid.z, 
-                    //threads.x*threads.y*threads.z);
-            
+        #ifdef __DEVICE_EMULATION__
+            #define DIM    64
+        #else
+            #define DIM    512
+        #endif
+        dim3 grid = ceil(numdots / (fp_type)DIM);
+        dim3 threads(DIM, 1, 1);
+        assert(threads.x <= DIM);    // max_threads_per_block
+
+        if(i == 0) 
+        {
+            printf("numdots_x=%u, numdots_y=%u, numdots=%u, threads.x=%u, threads.y=%u, grid.x=%u\n",
+                    numdots_x,    numdots_y,    numdots,    threads.x,    threads.y,    grid.x);
+            printf("launching kernel with %u blocks and %u threads...\n", 
+                        grid.x*grid.y*grid.z, 
+                        threads.x*threads.y*threads.z);
+        }
+        
+        printf("%d ", i); fflush(stdout);
+
         // create timer
         unsigned int timer_kernel = 0;
         cutilCheckError(cutCreateTimer(&timer_kernel));
@@ -148,7 +156,11 @@ int rk4solver_cuda(
         // copy Mnext_d (the result of kernel) to host main memory
         cutilSafeCall( cudaMemcpy( &M[(i+1)*numdots], Mnext_d, numdots * sizeof(Vector3), cudaMemcpyDeviceToHost ) );
     }
-    NEWLINE;
-    printf("Time taken by all (%d) kernel launches = %f ms\n", fieldlength-1, *time_kernel_cumulative);
+    
+    // reclaim memory
+    cutilSafeCall( cudaFree(Hcoupling_d) );
+    cutilSafeCall( cudaFree(Mcurr_d) );
+    cutilSafeCall( cudaFree(Mnext_d) );
+    
     return 0;
 }

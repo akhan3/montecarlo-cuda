@@ -4,8 +4,8 @@
 const fp_type finaltime = 1E-9;
 const fp_type timestep = 2E-12;
 
-const int numdots_y     = 400;   // rows
-const int numdots_x     = 400;   // columns
+const int numdots_y     = 200;   // rows
+const int numdots_x     = 200;   // columns
 const int numdots       = numdots_x * numdots_y;
 
 const fp_type alfa      = 0.05;     // damping coefficient
