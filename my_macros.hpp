@@ -21,6 +21,10 @@
 // floating point precision to use
 // typedef float fp_type;
 typedef float fp_type;
+typedef unsigned long long uint64;
+typedef unsigned int uint32;
+typedef unsigned short uint16;
+typedef unsigned char byte;
 
 
 #endif // #ifndef _MYMACROS_H_

@@ -18,19 +18,13 @@ LIBRARIES 	+= $(MATLAB_LIBRARIES)
 ifeq ($(emu),1)
 	CXXFLAGS 	+=	-g -D__DEBUG__ -D__DEVICE_EMULATION__
 	NVCCFLAGS	+= 	-g -D__DEBUG__ -deviceemu -D__DEVICE_EMULATION__
-	OBJDIR		+= 	obj/emu/
-	BINDIR		+= 	bin/emu/
 else
 ifeq ($(dbg),1)
 	CXXFLAGS 	+= 	-g -D__DEBUG__
 	NVCCFLAGS	+= 	-g -D__DEBUG__
-	OBJDIR		+= 	obj/debug/
-	BINDIR		+= 	bin/debug/
 else
 	CXXFLAGS 	+= 	-O3
 	#NVCCFLAGS	+= 	-O3
-	OBJDIR		+= 	obj/release/
-	BINDIR		+= 	bin/release/
 endif
 endif
 
@@ -46,40 +40,26 @@ NVCCFLAGS   	+= 	--compiler-options "$(COMMONFLAGS) -fno-strict-aliasing" \
 					--compiler-bindir=$(HOME)/usr_local/bin/gcc-4.3 \
 					$(CUDA_INCLUDES)
 
-OBJS	:=	$(OBJDIR)sim_constants.o \
-			$(OBJDIR)save_matfile.o  \
-			$(OBJDIR)main.o \
-			$(OBJDIR)rk4solver_kernel.o
+OBJS	:=	$(OBJDIR)main.o \
+			$(OBJDIR)calc_pi_kernel.o
 				
-TARGET	:= 	$(BINDIR)nanomagnet_cuda
+TARGET	:= 	$(BINDIR)mc_cuda
 
 # ==================================================================
 # Rules, target and dependencies
 # ==================================================================
 
-$(TARGET):	compile create_bin_dir
+$(TARGET):	$(OBJS)
 	$(VERBOSE)	$(LINKER) -o $@ $(OBJS) $(LIBRARIES) $(CUDA_LIBRARIES)
 
-$(OBJDIR)sim_constants.o	: sim_constants.cpp sim_constants.hpp my_macros.hpp 
-	$(VERBOSE)	$(CXX) $(CXXFLAGS) $(CUDA_INCLUDES) -o $@ -c sim_constants.cpp
-$(OBJDIR)save_matfile.o		: save_matfile.cpp my_macros.hpp
-	$(VERBOSE)	$(CXX) $(CXXFLAGS) $(CUDA_INCLUDES) -o $@ -c save_matfile.cpp
 $(OBJDIR)main.o				: main.cpp my_macros.hpp
 	$(VERBOSE)	$(CXX) $(CXXFLAGS) $(CUDA_INCLUDES) -o $@ -c main.cpp
-$(OBJDIR)rk4solver_kernel.o : rk4solver_kernel.cu Vector3.cpp Vector3.hpp my_macros.hpp 
-	$(VERBOSE)	$(NVCC) $(NVCCFLAGS) -o $@ -c rk4solver_kernel.cu
+$(OBJDIR)calc_pi_kernel.o : calc_pi_kernel.cu my_macros.hpp 
+	$(VERBOSE)	$(NVCC) $(NVCCFLAGS) -o $@ -c calc_pi_kernel.cu
 
 
-compile:	create_obj_dir $(OBJS)
-create_obj_dir: 
-	$(VERBOSE)	mkdir -p $(OBJDIR)
-create_bin_dir:
-	$(VERBOSE)	mkdir -p $(BINDIR)
 	
 clean:
 	$(VERBOSE)	rm -vf $(OBJS)
 tidy:	clean
 	$(VERBOSE)	rm -vf $(TARGET)
-clobber:	tidy
-	$(VERBOSE)	rm -rvf $(OBJDIR)
-	$(VERBOSE)	rm -rvf $(BINDIR)

@@ -1,120 +1,73 @@
 // TODO: implement matfile saving on the fly to save memory
 
 #include <cstdlib>
+#include <time.h>
 #include <cutil_inline.h>
 
 #include "my_macros.hpp"
-#include "Vector3.hpp"
-#include "Matrix3.hpp"
-#include "sim_constants.hpp"
-#include "save_matfile.hpp"
 
 
 // generates a uniformly distributed random number between a and b
-fp_type rand_atob(fp_type a, fp_type b) {
+inline fp_type rand_atob(fp_type a, fp_type b) {
     fp_type r = rand() / (fp_type)RAND_MAX;
     r = a + (b-a) * r;
     return r;
 }
 
-// implements Landau-Lifshitz-Gilbert differential equation
-Vector3 LLG_Mprime(
-            const fp_type t, 
-            const Vector3 &M, 
-            const Vector3 &Hcoupling,
-            const Vector3 &Hext,
-            const Vector3 N, 
-            const fp_type c, 
-            const fp_type alfa, 
-            const fp_type Ms);
+
+fp_type calc_pi_gpu(
+        const uint64 ITERATIONS,
+        const fp_type *domain_x,
+        const fp_type *domain_y,
+              double  *time_kernel_cumulative);
 
 
-int rk4solver_cuda(
-        const int fieldlength, 
-        const fp_type dt, 
-        const fp_type *timepoints, 
-        Vector3 *M,
-        double *time_kernel_cumulative);
-
-
-int rk4solver(
-        const int fieldlength, 
-        const fp_type dt, 
-        const fp_type *timepoints, 
-        Vector3 *M)
+fp_type calc_pi_cpu(
+        const uint64 ITERATIONS,
+        const fp_type *domain_x,
+        const fp_type *domain_y,
+              fp_type *distance)
 {
-    Vector3 *Hcoupling = (Vector3*)malloc(numdots * sizeof(Vector3));
-    if(Hcoupling == NULL) {
-        fprintf(stderr, "%s:%d Error allocating memory\n", __FILE__, __LINE__);
+    const int verbose = 0;
+// open file to write results    
+    FILE *cpu_log = fopen("mc_pi_cpu.txt", "w");
+    if(cpu_log == NULL) {
+        fprintf(stderr, "%s:%d Error opening/creating file mc_pi_cpu.txt\n", __FILE__, __LINE__);
         return EXIT_FAILURE;
     }
-
-    // Time-marching loop
-    for(int i = 0; i <= fieldlength-2; i++) 
-    {
-        const fp_type t = timepoints[i];
-        //printf("t = %g\n", t);
-        printf("%d ", i); fflush(stdout);
-        const Vector3 Hext = Hext_function(t);
-
-        // determine coupling field from neighbouring dots
-        for(int n = 0; n < numdots; n++) 
-        {
-            Hcoupling[n] = c0 * (   ((n-numdots_x >= 0)      ? M[i*numdots + n-numdots_x] : Vector3(0,0,0))     // top
-                                  + ((n+numdots_x < numdots) ? M[i*numdots + n+numdots_x] : Vector3(0,0,0))     // bottom
-                                  + ((n%numdots_x != 0)      ? M[i*numdots + n-1]         : Vector3(0,0,0))     // left
-                                  + (((n+1)%numdots_x != 0)  ? M[i*numdots + n+1]         : Vector3(0,0,0)) );  // right
-        }
-        // evaluate one-step of RK for all dots
-        for(int n = 0; n < numdots; n++) 
-        {
-            Vector3 k1 = LLG_Mprime(t        , M[i*numdots + n]             , Hcoupling[n], Hext, N, c, alfa, Ms);
-            Vector3 k2 = LLG_Mprime(t + dt/2 , M[i*numdots + n] + (dt/2)*k1 , Hcoupling[n], Hext, N, c, alfa, Ms);
-            Vector3 k3 = LLG_Mprime(t + dt/2 , M[i*numdots + n] + (dt/2)*k2 , Hcoupling[n], Hext, N, c, alfa, Ms);
-            Vector3 k4 = LLG_Mprime(t + dt   , M[i*numdots + n] + dt*k3     , Hcoupling[n], Hext, N, c, alfa, Ms);
-            Vector3 Mprime = 1/6.0 * (k1 + 2*k2 + 2*k3 + k4);
-            M[(i+1)*numdots + n] = M[i*numdots + n] + dt * Mprime;
-        }
+// Monte-Carlo loop
+    uint64 hits = 0;
+    fp_type pi_mc = 0;
+    for(uint64 i = 0; i < ITERATIONS; i++) {
+        distance[i] = sqrt(domain_x[i]*domain_x[i] + domain_y[i]*domain_y[i]);
+        if(distance[i] < 1)
+            hits++;
+        pi_mc = 4.0 * (fp_type)hits / (i+1);
+        if(verbose)
+            printf("Iter#%llu: PI = %.8f\n", i+1, pi_mc);
+        fprintf(cpu_log, "%f\n", pi_mc);
     }
-    NEWLINE;
-    free(Hcoupling);
-    return 0;
+    fclose(cpu_log);
+    return pi_mc;
 }
 
 
-int solve_array() 
+int calc_pi(uint64 ITERATIONS) 
 {
-    const fp_type ftime = timestep * ceil((fp_type)finaltime / timestep);
-    const int fieldlength = ftime / timestep + 1;
-    fp_type *timepoints = (fp_type*)malloc(fieldlength * sizeof(fp_type));
-    if(timepoints == NULL) {
+    fp_type *domain_x = (fp_type*)malloc(ITERATIONS * sizeof(fp_type));
+    fp_type *domain_y = (fp_type*)malloc(ITERATIONS * sizeof(fp_type));
+    fp_type *distance = (fp_type*)malloc(ITERATIONS * sizeof(fp_type));
+    if(domain_x == NULL || domain_y == NULL || distance == NULL) {
         fprintf(stderr, "%s:%d Error allocating memory\n", __FILE__, __LINE__);
         return EXIT_FAILURE;
     }
-    for(int i = 0; i < fieldlength; i++)
-        timepoints[i] = i * ftime / (fieldlength-1);
-    const fp_type dt = timepoints[1] - timepoints[0];
     
-    // initialize M for all dots at each timepoint
-    // M[t][dotindex]
-    Vector3 *M = (Vector3*)malloc(fieldlength * numdots * sizeof(Vector3));
-    if(M == NULL) {
-        fprintf(stderr, "%s:%d Error allocating memory\n", __FILE__, __LINE__);
-        return EXIT_FAILURE;
+// generate random inputs in the domain
+    for(uint64 i = 0; i < ITERATIONS; i++) {
+        domain_x[i] = rand_atob(0, 1);
+        domain_y[i] = rand_atob(0, 1);
     }
-    for(int y = 0; y < numdots_y; y++) {
-        for(int x = 0; x < numdots_x; x++) {
-            int n = y*numdots_x + x;
-            fp_type theta = rand_atob(0, 2*M_PI);   // angle from x-axis in xy-plane
-            fp_type phi = rand_atob(0, 2*M_PI);     // angle from z-axis
-            //if(y%2 && x%2 || !(y%2) && !(x%2)) phi = 0; else phi = M_PI;
-            M[0*numdots + n] = Ms * Vector3(sin(phi)*cos(theta), sin(phi)*sin(theta), cos(phi));
-        }
-    }
-    printf("%.2f MB of memory is required for the simulation of %dx%d dots for %d time points (%gs at %gs stepping)\n",
-                fieldlength * numdots * sizeof(Vector3)/1024.0/1024.0,
-                numdots_y, numdots_x, fieldlength, ftime, timestep);
-    
+
     int status = 0;
     
 // call the RK solver routine on GPU
@@ -125,23 +78,18 @@ int solve_array()
     cutilCheckError(cutCreateTimer(&timer_gpu));
     cutilCheckError(cutStartTimer(timer_gpu));  // start timer
     // launch solver
-    status |= rk4solver_cuda(fieldlength, dt, timepoints, M, &time_kernel_cumulative);
+    fp_type pi_gpu = calc_pi_gpu(ITERATIONS, domain_x, domain_y, &time_kernel_cumulative);
     // read the timer
     cutilCheckError(cutStopTimer(timer_gpu));
     double time_gpu = cutGetTimerValue(timer_gpu);
     NEWLINE;
-    printf("Time taken by all (%d) kernel launches = %f ms (%.0f%%)\n", fieldlength-1, time_kernel_cumulative, 100*time_kernel_cumulative/time_gpu);
-    printf("Time taken by memory trasfers and sync overhead = %f ms (%.0f%%)\n", time_gpu - time_kernel_cumulative, 100*(1-time_kernel_cumulative/time_gpu));
+    //printf("Time taken by all (%d) kernel launches = %f ms (%.0f%%)\n", fieldlength-1, time_kernel_cumulative, 100*time_kernel_cumulative/time_gpu);
+    printf("Time taken by the kernel = %f ms (%.2f%%)\n", time_kernel_cumulative, 100*time_kernel_cumulative/time_gpu);
+    printf("Time taken by memory trasfers and sync overhead = %f ms (%.2f%%)\n", time_gpu - time_kernel_cumulative, 100*(1-time_kernel_cumulative/time_gpu));
     SEPARATOR;
-    printf("Time taken by RK4 solver on GPU = %f ms\n", time_gpu);
+    printf("Calculated value of PI = %.8f after %llu iterations\n", pi_gpu, ITERATIONS);
+    printf("Time taken by Monte Carlo on GPU = %f ms\n", time_gpu);
     SEPARATOR;
-    printf("M(t = 0, dot0) = "); M[0*numdots + 0].print();
-    printf("M(t = %g, dot0) = ", ftime); M[(fieldlength-1)*numdots + 0].print();
-    if(save_matfiles) {
-        char matfile_name[100];
-        sprintf(matfile_name, "%s/%s_results_cuda.mat", matfiles_dir, sim_id);
-        status |= save_matfile(matfile_name, fieldlength, numdots_y, numdots_x, M, timepoints, 1);
-    }
 
 // call the RK solver routine on CPU
     NEWLINE; printf("Simulating on CPU...\n"); 
@@ -150,54 +98,50 @@ int solve_array()
     cutilCheckError(cutCreateTimer(&timer_cpu));
     cutilCheckError(cutStartTimer(timer_cpu));  // start timer
     // launch solver
-    status |= rk4solver(fieldlength, dt, timepoints, M);
+    fp_type pi_cpu = calc_pi_cpu(ITERATIONS, domain_x, domain_y, distance);
     // read the timer
     cutilCheckError(cutStopTimer(timer_cpu));
     double time_cpu = cutGetTimerValue(timer_cpu);
     SEPARATOR;
-    printf("Time taken by RK4 solver on CPU = %f ms\n", time_cpu);
+    printf("Calculated value of PI = %.8f after %llu iterations\n", pi_cpu, ITERATIONS);
+    printf("Time taken by Monte Carlo on CPU = %f ms\n", time_cpu);    
     SEPARATOR;
-    printf("M(t = 0, dot0) = "); M[0*numdots + 0].print();
-    printf("M(t = %g, dot0) = ", ftime); M[(fieldlength-1)*numdots + 0].print();
-    if(save_matfiles) {
-        char matfile_name[100];
-        sprintf(matfile_name, "%s/%s_results.mat", matfiles_dir, sim_id);
-        status |= save_matfile(matfile_name, fieldlength, numdots_y, numdots_x, M, timepoints, 1);
-    }
             
     // print speed-up info
     cudaDeviceProp deviceProp;
     cudaGetDeviceProperties(&deviceProp, 0);
     SEPARATOR2;
-    printf("Speed-up factor = %.2f (\"%s\" with %d cores)\n", 
+    printf("Speed-up factor (overall) = %.2f (\"%s\" with %d cores)\n", 
         time_cpu/time_gpu, deviceProp.name, 8 * deviceProp.multiProcessorCount);
+    printf("Speed-up factor (compute) = %.2f (\"%s\" with %d cores)\n", 
+        time_cpu/time_kernel_cumulative, deviceProp.name, 8 * deviceProp.multiProcessorCount);
     SEPARATOR2;
 
-    // reclaim memory
-    free(timepoints);
-    free(M);
-    printf("%.2f MB of memory was required for the simulation of %dx%d dots for %d time points (%gs at %gs stepping)\n",
-                fieldlength * numdots * sizeof(Vector3)/1024.0/1024.0,
-                numdots_y, numdots_x, fieldlength, ftime, timestep);
+// reclaim memory
+    free(domain_x);
+    free(domain_y);
+    free(distance);
+
     return status;
 }
 
 int main(int argc, char **argv) {
-    int debug = 0, pinned = 0, matlab = 1;
-    if( !strcmp(argv[argc-1], "debug") )
-        debug = 1;
-    if( !strcmp(argv[argc-1], "pinned") )
-        pinned = 1;
-    if( !strcmp(argv[argc-1], "no-matlab") )
-        matlab = 0;
+    uint64 ITERATIONS = 999999;
+    unsigned int SEED = (unsigned int)time(NULL);
 
-    //srand((unsigned int)time(NULL));
-    srand((unsigned int)54);
-    int status = solve_array();
+    if(argc >= 2) {
+        sscanf(argv[1], "%llu", &ITERATIONS);
+        if(argc >= 3)
+            sscanf(argv[2], "%u", &SEED);
+    }
+
+    srand(SEED);
+    int status = calc_pi(ITERATIONS);
 
     if(status == 0)
         fprintf(stdout, "Successfully completed!\n");
     else
         fprintf(stderr, "Error occured!\n");
+    printf("SEED: %u\n", SEED);
     return (status == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
