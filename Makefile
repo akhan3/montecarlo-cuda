@@ -1,6 +1,6 @@
-CXX         := 	g++-4.3
-CC         	:=	gcc-4.3
-LINKER     	:= 	g++-4.3 -fPIC
+CXX         := 	g++
+CC         	:=	gcc
+LINKER     	:= 	g++ -fPIC
 
 # CUDA compiler, includes and libraries
 NVCC 		:= 	nvcc
@@ -8,7 +8,7 @@ CUDA_INSTALL_PATH 	:= 	/usr/local/cuda
 CUDA_SDK_PATH 		:= 	$(HOME)/NVIDIA_GPU_Computing_SDK
 CUDA_INCLUDES   	:= 	-I$(CUDA_INSTALL_PATH)/include -I$(CUDA_SDK_PATH)/C/common/inc
 CUDA_LIBRARIES 		:= 	-L$(CUDA_INSTALL_PATH)/lib64 -lcuda -lcudart \
-						-L$(CUDA_SDK_PATH)/C/lib/ -lcutil
+						-L$(CUDA_SDK_PATH)/C/lib/ -lcutil_x86_64
 
 
 # My includes and libraries
@@ -37,7 +37,6 @@ endif
 COMMONFLAGS		+=	-Wall -W $(INCLUDES)
 CXXFLAGS    	+= 	$(COMMONFLAGS)
 NVCCFLAGS   	+= 	--compiler-options "$(COMMONFLAGS) -fno-strict-aliasing" \
-					--compiler-bindir=$(HOME)/usr_local/bin/gcc-4.3 \
 					$(CUDA_INCLUDES)
 
 OBJS	:=	$(OBJDIR)main.o \
