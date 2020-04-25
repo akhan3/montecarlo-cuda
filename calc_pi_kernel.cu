@@ -114,6 +114,7 @@ fp_type calc_pi_gpu(
     // copy Mnext_d (the result of kernel) to host main memory
     cutilSafeCall( cudaMemcpy( hits_h, hits_d, grid.x * sizeof(uint32), cudaMemcpyDeviceToHost ) );
 
+// final summation in CPU
     uint64 hits = 0;
     fp_type pi_mc = 0;
     for(uint64 i = 0; i < grid.x; i++) {

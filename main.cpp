@@ -111,10 +111,10 @@ int calc_pi(uint64 ITERATIONS)
     cudaDeviceProp deviceProp;
     cudaGetDeviceProperties(&deviceProp, 0);
     SEPARATOR2;
-    printf("Speed-up factor (overall) = %.2f (\"%s\" with %d cores)\n", 
+    printf("Speed-up factor (overall) = %f (\"%s\" with %d cores)\n", 
         time_cpu/time_gpu, deviceProp.name, 8 * deviceProp.multiProcessorCount);
-    printf("Speed-up factor (compute) = %.2f (\"%s\" with %d cores)\n", 
-        time_cpu/time_kernel_cumulative, deviceProp.name, 8 * deviceProp.multiProcessorCount);
+    //printf("Speed-up factor (compute) = %.2f (\"%s\" with %d cores)\n", 
+        //time_cpu/time_kernel_cumulative, deviceProp.name, 8 * deviceProp.multiProcessorCount);
     SEPARATOR2;
 
 // reclaim memory
@@ -126,11 +126,13 @@ int calc_pi(uint64 ITERATIONS)
 }
 
 int main(int argc, char **argv) {
-    uint64 ITERATIONS = 999999;
+    uint64 ITERATIONS = 1e5;
     unsigned int SEED = (unsigned int)time(NULL);
 
     if(argc >= 2) {
-        sscanf(argv[1], "%llu", &ITERATIONS);
+        fp_type iter_fp;
+        sscanf(argv[1], "%f", &iter_fp);
+        ITERATIONS = (uint64)iter_fp;
         if(argc >= 3)
             sscanf(argv[2], "%u", &SEED);
     }
